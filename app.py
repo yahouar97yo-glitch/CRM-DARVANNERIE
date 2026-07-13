@@ -20,7 +20,7 @@ if not logger.handlers:
 class ClientSegment(enum.Enum):
     HOTEL = "Hospitality / Hôtels de Prestige"
     EMBASSY = "Ambassades / Corps Diplomatiques"
-    RESTAURANT = "Gastr…
+    RESTAURANT = "Gastronomique
 [4:48 AM, 13/07/2026] Tazart Mobilier: import streamlit as st
 import pandas as pd
 import sqlite3
