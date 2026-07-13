@@ -7,7 +7,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.graphics.shapes import Drawing, Rect, String, Line
 
-# --- SYSTÈME DE STOCKAGE PERSISTANT COMPATIBLE CLOUD ---
+# --- 1. SYSTÈME DE STOCKAGE PERSISTANT COMPATIBLE CLOUD (SESSION STATE) ---
 if 'orders' not in st.session_state:
     st.session_state.orders = [
         {
@@ -30,7 +30,7 @@ if 'inventory' not in st.session_state:
         "Haute Tapisserie (Textiles Certifiés & Cuirs)": {"quantity": 500.0, "unit": "Mètres", "min": 100.0}
     }
 
-# --- DESIGN DU LOGO VECTORIEL ---
+# --- 2. DESIGN DU LOGO VECTORIEL POUR LES DOCUMENTS ---
 def draw_pdf_logo(width=480, height=50):
     d = Drawing(width, height)
     d.add(Rect(0, 0, width, height, fillColor=colors.HexColor("#F9F8F6"), strokeColor=None))
@@ -39,7 +39,7 @@ def draw_pdf_logo(width=480, height=50):
     d.add(Line(280, height/2, 460, height/2, strokeColor=colors.HexColor("#1A1A1A"), strokeWidth=1))
     return d
 
-# --- CONSTRUCTEUR DE DOCUMENTS FACTURES & DEVIS ---
+# --- 3. CONSTRUCTEUR DE DOCUMENTS DEVIS & FACTURES PDF ---
 def build_document_pdf(row, doc_type="DEVIS"):
     filename = f"{doc_type}_{str(row['Client']).replace(' ', '_')}.pdf"
     doc = SimpleDocTemplate(filename, pagesize=A4, leftMargin=54, rightMargin=54, topMargin=54, bottomMargin=54)
@@ -100,7 +100,7 @@ def build_document_pdf(row, doc_type="DEVIS"):
     doc.build(story)
     return filename
 
-# --- INTERFACE DE GESTION CONTEMPORAINE ---
+# --- 4. INTERFACE GRAPHIQUE WEB (STREAMLIT) ---
 st.set_page_config(page_title="ERP DARVANNERIE", layout="wide")
 st.title("DARVANNERIE — Direction Industrielle & Comptabilité B2B")
 st.write("Plateforme interne sécurisée d'ordonnancement des ateliers, de comptabilité des acomptes et d'édition documentaire.")
@@ -108,7 +108,7 @@ st.write("Plateforme interne sécurisée d'ordonnancement des ateliers, de compt
 tabs = st.tabs(["📊 Tableau de Bord Global", "💸 Comptabilité & Échéances", "📝 Saisie Nouvelle Commande", "📦 Gestion des Stocks Ateliers"])
 df_orders = pd.DataFrame(st.session_state.orders)
 
-# ONGLET 1 : PRODUCTION ET CALENDRIER
+# --- ONGLET 1 : PRODUCTION ET CALENDRIER LOGISTIQUE ---
 with tabs[0]:
     st.subheader("Planification des chantiers et fabrication")
     if not df_orders.empty:
@@ -126,7 +126,7 @@ with tabs[0]:
     else:
         st.info("Aucun carnet de commande actif.")
 
-# ONGLET 2 : COMPTABILITÉ ET PDF
+# --- ONGLET 2 : SUIVI FINANCIER DES ACOMPTES & IMPRESSION PDF ---
 with tabs[1]:
     st.subheader("Suivi financier des acomptes et facturation")
     if not df_orders.empty:
@@ -166,28 +166,24 @@ with tabs[1]:
             st.markdown("### ⚙️ Administration")
             if st.button("❌ Clôturer et Archiver cette commande"):
                 st.session_state.orders = [o for o in st.session_state.orders if o["ID"] != order_id]
-                st.success("Commande archivée.")
+                st.success("Commande archivée de la base active.")
                 st.rerun()
     else:
         st.info("Aucune donnée financière disponible.")
 
-# ONGLET 3 : NOUVELLE COMMANDE
+# --- ONGLET 3 : ENREGISTREMENT MARCHÉ ET SOUSTRACTION DES STOCKS ---
 with tabs[2]:
     st.subheader("Enregistrement d'un nouvel ordre de fabrication FF&E")
     with st.form("new_order_form"):
-        c_name = st.text_input("Raison sociale du donneur d'ordre")
+        c_name = st.text_input("Raison sociale du donneur d'ordre (Hôtel, Ambassade, Concessionnaire)")
         p_type = st.selectbox("Secteur d'activité", ["Hospitality", "Villa & Résidentiel", "Institutionnel", "Corporate / Bureaux"])
         
         col_f1, col_f2 = st.columns(2)
         with col_f1:
-            total_ht = st.number_input("Montant Marché HT (DH)", min_value=0.0, step=5000.0)
+            total_ht = st.number_input("Montant Marché Hors Taxes (DH)", min_value=0.0, step=5000.0)
         with col_f2:
-            acompte_paid = st.number_input("Acompte versé à la signature (DH)", min_value=0.0, step=5000.0)
+            acompte_paid = st.number_input("Acompte financier versé à la signature (DH)", min_value=0.0, step=5000.0)
             
-        deliv_date = st.date_input("Date contractuelle de livraison", value=date.today())
+        deliv_date = st.date_input("Date contractuelle de livraison sur chantier", value=date.today())
         p_status = st.selectbox("Ordonnancement initial / Phase d'atelier", [
             "Étude technique & Plans d'exécution", "Lancement Prototypage Témoin", "En production (Atelier Ébénisterie/Bois)", 
-            "En production (Atelier Métallurgie/Art)", "En production (Atelier Tressage/Rotin)", "En production (Atelier Haute Tapisserie)",
-            "Contrôle Qualité & Emballage", "Livraison & Pose sur site"
-        ])
-        
