@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
-import os
 from datetime import datetime, date
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -9,104 +7,28 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.graphics.shapes import Drawing, Rect, String, Line
 
-# --- INITIALISATION DE LA BASE DE DONNÉES ---
-DB_NAME = "darvannerie_management.db"
+# --- SYSTÈME DE STOCKAGE PERSISTANT COMPATIBLE CLOUD ---
+if 'orders' not in st.session_state:
+    st.session_state.orders = [
+        {
+            "ID": 1,
+            "Client": "Hôtel Royal Mansour",
+            "Secteur": "Hospitality",
+            "Total HT (DH)": 450000.0,
+            "Acompte Versé (DH)": 135000.0,
+            "Date Livraison": "2026-09-15",
+            "Statut": "En production (Atelier Bois)",
+            "Détail Articles": "Lot 1: 40 Lits de jour Outdoor en Iroko\nLot 2: 15 Tables basses en placage Noyer"
+        }
+    ]
 
-def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    # Table des commandes
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_name TEXT NOT NULL,
-            project_type TEXT,
-            total_ht REAL,
-            amount_paid REAL,
-            delivery_date TEXT,
-            status TEXT,
-            items_json TEXT
-        )
-    """)
-    # Table des stocks
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS inventory (
-            material_name TEXT PRIMARY KEY,
-            quantity REAL,
-            unit TEXT,
-            min_threshold REAL
-        )
-    """)
-    
-    # Données initiales commandes
-    c.execute("SELECT COUNT(*) FROM orders")
-    if c.fetchone() == 0:
-        c.execute("""
-            INSERT INTO orders (client_name, project_type, total_ht, amount_paid, delivery_date, status, items_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            "Hôtel Royal Mansour", "Hospitality", 450000.0, 135000.0, 
-            "2026-09-15", "En production (Atelier Bois)", 
-            "Lot 1: 40 Lits de jour Outdoor en Iroko\nLot 2: 15 Tables basses en placage Noyer"
-        ))
-    
-    # Données initiales stocks de la manufacture
-    c.execute("SELECT COUNT(*) FROM inventory")
-    if c.fetchone() == 0:
-        initial_stocks = [
-            ("Bois Massif & Placages (Noyer/Chêne/Iroko)", 45.0, "m³", 10.0),
-            ("Métallurgie d'Art (Acier/Laiton/Profilés)", 350.0, "kg", 80.0),
-            ("Fibres Premium (Rotin Naturel & Synthétique)", 120.0, "Bobines", 30.0),
-            ("Haute Tapisserie (Textiles Certifiés & Cuirs)", 500.0, "Mètres", 100.0)
-        ]
-        c.executemany("INSERT INTO inventory VALUES (?, ?, ?, ?)", initial_stocks)
-        
-    conn.commit()
-    conn.close()
-
-def get_orders():
-    conn = sqlite3.connect(DB_NAME)
-    df = pd.read_sql_query("SELECT id as ID, client_name as Client, project_type as [Secteur], total_ht as [Total HT (DH)], amount_paid as [Acompte Versé (DH)], delivery_date as [Date Livraison], status as Statut, items_json as [Détail Articles] FROM orders", conn)
-    conn.close()
-    return df
-
-def save_order(client, p_type, tht, paid, d_date, status, items, wood_req, metal_req, rattan_req, fabric_req):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    # Sauvegarde commande
-    c.execute("""
-        INSERT INTO orders (client_name, project_type, total_ht, amount_paid, delivery_date, status, items_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (client, p_type, tht, paid, str(d_date), status, items))
-    
-    # Déduction automatique des stocks
-    c.execute("UPDATE inventory SET quantity = quantity - ? WHERE material_name = ?", (wood_req, "Bois Massif & Placages (Noyer/Chêne/Iroko)"))
-    c.execute("UPDATE inventory SET quantity = quantity - ? WHERE material_name = ?", (metal_req, "Métallurgie d'Art (Acier/Laiton/Profilés)"))
-    c.execute("UPDATE inventory SET quantity = quantity - ? WHERE material_name = ?", (rattan_req, "Fibres Premium (Rotin Naturel & Synthétique)"))
-    c.execute("UPDATE inventory SET quantity = quantity - ? WHERE material_name = ?", (fabric_req, "Haute Tapisserie (Textiles Certifiés & Cuirs)"))
-    
-    conn.commit()
-    conn.close()
-
-def remove_order(order_id):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("DELETE FROM orders WHERE id = ?", (order_id,))
-    conn.commit()
-    conn.close()
-
-def get_inventory():
-    conn = sqlite3.connect(DB_NAME)
-    df = pd.read_sql_query("SELECT material_name as [Matière Première], quantity as [Stock Actuel], unit as [Unité], min_threshold as [Seuil d'Alerte] FROM inventory", conn)
-    conn.close()
-    return df
-
-def restock_material(mat_name, qty):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("UPDATE inventory SET quantity = quantity + ? WHERE material_name = ?", (qty, mat_name))
-    conn.commit()
-    conn.close()
+if 'inventory' not in st.session_state:
+    st.session_state.inventory = {
+        "Bois Massif & Placages (Noyer/Chêne/Iroko)": {"quantity": 45.0, "unit": "m³", "min": 10.0},
+        "Métallurgie d'Art (Acier/Laiton/Profilés)": {"quantity": 350.0, "unit": "kg", "min": 80.0},
+        "Fibres Premium (Rotin Naturel & Synthétique)": {"quantity": 120.0, "unit": "Bobines", "min": 30.0},
+        "Haute Tapisserie (Textiles Certifiés & Cuirs)": {"quantity": 500.0, "unit": "Mètres", "min": 100.0}
+    }
 
 # --- DESIGN DU LOGO VECTORIEL ---
 def draw_pdf_logo(width=480, height=50):
@@ -178,16 +100,13 @@ def build_document_pdf(row, doc_type="DEVIS"):
     doc.build(story)
     return filename
 
-# --- INTERFACE DE GESTION CONTEMPORAINE (STREAMLIT) ---
-init_db()
+# --- INTERFACE DE GESTION CONTEMPORAINE ---
 st.set_page_config(page_title="ERP DARVANNERIE", layout="wide")
-
 st.title("DARVANNERIE — Direction Industrielle & Comptabilité B2B")
 st.write("Plateforme interne sécurisée d'ordonnancement des ateliers, de comptabilité des acomptes et d'édition documentaire.")
 
 tabs = st.tabs(["📊 Tableau de Bord Global", "💸 Comptabilité & Échéances", "📝 Saisie Nouvelle Commande", "📦 Gestion des Stocks Ateliers"])
-df_orders = get_orders()
-df_inventory = get_inventory()
+df_orders = pd.DataFrame(st.session_state.orders)
 
 # ONGLET 1 : PRODUCTION ET CALENDRIER
 with tabs[0]:
@@ -203,7 +122,6 @@ with tabs[0]:
         
         df_dash = df_orders.copy()
         df_dash["Compte à rebours"] = df_dash["Date Livraison"].apply(compute_days)
-        
         st.dataframe(df_dash[["ID", "Client", "Secteur", "Date Livraison", "Compte à rebours", "Statut"]], use_container_width=True, hide_index=True)
     else:
         st.info("Aucun carnet de commande actif.")
@@ -216,3 +134,60 @@ with tabs[1]:
         
         with col_select:
             order_id = st.selectbox("Sélectionner l'ID de la commande cible", df_orders["ID"].unique())
+            row_selected = df_orders[df_orders["ID"] == order_id].iloc[0]
+            
+            tht = float(row_selected["Total HT (DH)"])
+            ttc = tht * 1.20
+            paid = float(row_selected["Acompte Versé (DH)"])
+            pourcentage_acompte = (paid / ttc * 100) if ttc > 0 else 0
+            reste = ttc - paid
+            
+            st.metric("Total TTC à percevoir", f"{ttc:,.2f} DH")
+            st.metric("Acompte perçu", f"{paid:,.2f} DH", f"{pourcentage_acompte:.1f}% du TTC")
+            st.metric("Reste à recouvrer", f"{reste:,.2f} DH")
+            
+        with col_actions:
+            st.markdown("### 🖨️ Édition Documentaire Réglementaire")
+            col_b1, col_b2 = st.columns(2)
+            
+            with col_b1:
+                if st.button("Générer le Devis Client"):
+                    pdf_name = build_document_pdf(row_selected, "DEVIS")
+                    with open(pdf_name, "rb") as f:
+                        st.download_button(label="📥 Télécharger le Devis PDF", data=f, file_name=pdf_name, mime="application/pdf")
+            
+            with col_b2:
+                if st.button("Générer la Facture d'Acompte"):
+                    pdf_name = build_document_pdf(row_selected, "FACTURE_ACOMPTE")
+                    with open(pdf_name, "rb") as f:
+                        st.download_button(label="📥 Télécharger la Facture PDF", data=f, file_name=pdf_name, mime="application/pdf")
+            
+            st.write("---")
+            st.markdown("### ⚙️ Administration")
+            if st.button("❌ Clôturer et Archiver cette commande"):
+                st.session_state.orders = [o for o in st.session_state.orders if o["ID"] != order_id]
+                st.success("Commande archivée.")
+                st.rerun()
+    else:
+        st.info("Aucune donnée financière disponible.")
+
+# ONGLET 3 : NOUVELLE COMMANDE
+with tabs[2]:
+    st.subheader("Enregistrement d'un nouvel ordre de fabrication FF&E")
+    with st.form("new_order_form"):
+        c_name = st.text_input("Raison sociale du donneur d'ordre")
+        p_type = st.selectbox("Secteur d'activité", ["Hospitality", "Villa & Résidentiel", "Institutionnel", "Corporate / Bureaux"])
+        
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            total_ht = st.number_input("Montant Marché HT (DH)", min_value=0.0, step=5000.0)
+        with col_f2:
+            acompte_paid = st.number_input("Acompte versé à la signature (DH)", min_value=0.0, step=5000.0)
+            
+        deliv_date = st.date_input("Date contractuelle de livraison", value=date.today())
+        p_status = st.selectbox("Ordonnancement initial / Phase d'atelier", [
+            "Étude technique & Plans d'exécution", "Lancement Prototypage Témoin", "En production (Atelier Ébénisterie/Bois)", 
+            "En production (Atelier Métallurgie/Art)", "En production (Atelier Tressage/Rotin)", "En production (Atelier Haute Tapisserie)",
+            "Contrôle Qualité & Emballage", "Livraison & Pose sur site"
+        ])
+        
