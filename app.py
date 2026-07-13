@@ -1,4 +1,4 @@
-%%writefile app.py
+import streamlit as st
 import streamlit as st
 from os import path
 from core.logger import logger
