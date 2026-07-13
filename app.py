@@ -29,7 +29,6 @@ def init_db():
     """)
     c.execute("SELECT COUNT(*) FROM orders")
     if c.fetchone() == 0:
-        # Données initiales exemplaires pour la manufacture
         c.execute("""
             INSERT INTO orders (client_name, project_type, total_ht, amount_paid, delivery_date, status, items_json)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -64,14 +63,11 @@ def remove_order(order_id):
     conn.commit()
     conn.close()
 
-# --- DESIGN DU LOGO VECTORIEL EXAMPLAIRE ---
+# --- DESIGN DU LOGO VECTORIEL ---
 def draw_pdf_logo(width=480, height=50):
     d = Drawing(width, height)
-    # Rectangle de fond beige/lin très subtil
     d.add(Rect(0, 0, width, height, fillColor=colors.HexColor("#F9F8F6"), strokeColor=None))
-    # Ligne géométrique noire représentant la précision
     d.add(Line(20, height/2, 100, height/2, strokeColor=colors.HexColor("#1A1A1A"), strokeWidth=1))
-    # Monogramme textuel
     d.add(String(120, height/2 - 5, "D A R V A N N E R I E", fontName="Helvetica-Bold", fontSize=14, fillColor=colors.HexColor("#1A1A1A")))
     d.add(Line(280, height/2, 460, height/2, strokeColor=colors.HexColor("#1A1A1A"), strokeWidth=1))
     return d
@@ -86,32 +82,26 @@ def build_document_pdf(row, doc_type="DEVIS"):
     bold_s = ParagraphStyle('DocBodyBold', parent=body_s, fontName='Helvetica-Bold', textColor=colors.HexColor("#1A1A1A"))
     
     story = []
-    
-    # 1. En-tête graphique (Logo)
     story.append(draw_pdf_logo())
     story.append(Spacer(1, 20))
     
-    # 2. Informations Institutionnelles
     meta_data = [
         [Paragraph("<b>MANUFACTURE DARVANNERIE</b><br/>Zone Industrielle Haut de Gamme<br/>Maroc<br/>contact@darvannerie.com", body_s),
          Paragraph(f"<b>DOCUMENT :</b> {doc_type} OFFICIEL<br/><b>RÉF :</b> DV-2026-{row['ID']}<br/><b>DATE :</b> {date.today().strftime('%d/%m/%Y')}", body_s)]
     ]
-    t_meta = Table(meta_data, colWidths=)
+    t_meta = Table(meta_data, colWidths=[240, 240])
     t_meta.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
     story.append(t_meta)
     story.append(Spacer(1, 30))
     
-    # 3. Informations Destinataire
     story.append(Paragraph(f"<b>DESTINATAIRE / PROJET :</b>", bold_s))
     story.append(Paragraph(f"Nom du compte : {row['Client']}<br/>Division sectorielle : {row['Secteur']}<br/>Échéance d'installation ciblée : {row['Date Livraison']}", body_s))
     story.append(Spacer(1, 25))
     
-    # 4. Spécifications techniques des ouvrages
     story.append(Paragraph("<b>DÉSIGNATION ET SPÉCIFICATIONS DES OUVRAGES (SUR-MESURE) :</b>", bold_s))
     story.append(Paragraph(str(row['Détail Articles']).replace('\n', '<br/>'), body_s))
     story.append(Spacer(1, 30))
     
-    # 5. Décompte Financier B2B complet (HT, TVA, TTC, Acompte)
     total_ht = float(row['Total HT (DH)'])
     tva = total_ht * 0.20
     total_ttc = total_ht + tva
@@ -125,7 +115,7 @@ def build_document_pdf(row, doc_type="DEVIS"):
         [Paragraph("<b>ACOMPTE DÉJÀ PERÇU :</b>", body_s), Paragraph(f"{acompte:,.2f} DH", body_s)],
         [Paragraph("<b>SOLDE RESTANT À PERCEVOIR :</b>", bold_s), Paragraph(f"<font color='#7D6752'><b>{reste_a_payer:,.2f} DH</b></font>", bold_s)]
     ]
-    t_fin = Table(fin_data, colWidths=)
+    t_fin = Table(fin_data, colWidths=[240, 240])
     t_fin.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor("#F9F8F6")),
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
@@ -157,7 +147,6 @@ df_orders = get_orders()
 with tabs[0]:
     st.subheader("Planification des chantiers et fabrication")
     if not df_orders.empty:
-        # Calcul dynamique des jours restants avant livraison
         def compute_days(date_str):
             try:
                 target = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -177,13 +166,12 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("Suivi financier des acomptes et facturation")
     if not df_orders.empty:
-        col_select, col_actions = st.columns([1, 2])
+        col_select, col_actions = st.columns(2)
         
         with col_select:
             order_id = st.selectbox("Sélectionner l'ID de la commande cible", df_orders["ID"].unique())
             row_selected = df_orders[df_orders["ID"] == order_id].iloc[0]
             
-            # Calcul des indicateurs financiers instantanés
             tht = float(row_selected["Total HT (DH)"])
             ttc = tht * 1.20
             paid = float(row_selected["Acompte Versé (DH)"])
@@ -213,3 +201,14 @@ with tabs[1]:
             st.write("---")
             st.markdown("### ⚙️ Administration")
             if st.button("❌ Clôturer et Archiver cette commande définitivement"):
+                remove_order(order_id)
+                st.success("Commande archivée de la base active.")
+                st.rerun()
+    else:
+        st.info("Aucune donnée financière disponible.")
+
+# ONGLET 3 : NOUVELLE COMMANDE
+with tabs[2]:
+    st.subheader("Enregistrement d'un nouvel ordre de fabrication FF&E")
+    with st.form("new_order_form"):
+        c_name = st.text_input("Raison sociale du donneur d'ordre (Hôtel, Ambassade, Concessionnaire)")
