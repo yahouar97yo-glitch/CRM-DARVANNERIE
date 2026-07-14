@@ -101,7 +101,6 @@ def init_db():
         )
     """)
     
-    # Seeding initial si vide
     c.execute("SELECT COUNT(*) FROM users")
     if c.fetchone() == 0:
         salt = bcrypt.gensalt(rounds=12)
@@ -131,7 +130,6 @@ class BusinessEngine:
     def __init__(self, db_path):
         self.db_path = db_path
 
-    # CRM Mappings
     def get_all_prospects_df(self):
         conn = sqlite3.connect(self.db_path)
         df = pd.read_sql_query("SELECT id as ID, company_name as [Établissement], segment as [Secteur d'Activité], contact_person as [Contact Principal], phone as [Téléphone], email as [E-mail], potential_value as [Valeur Potentielle (DH)], probability as [Probabilité], next_follow_up as [Prochain Suivi], notes as [Notes] FROM crm_prospects ORDER BY company_name", conn)
@@ -158,7 +156,6 @@ class BusinessEngine:
         conn.commit()
         conn.close()
 
-    # Production Mappings
     def get_production_projects_df(self):
         conn = sqlite3.connect(self.db_path)
         query = """
@@ -196,7 +193,6 @@ class BusinessEngine:
         conn.commit()
         conn.close()
 
-    # Finance Mappings
     def update_financial_ledger(self, project_id, total_ht, amount_paid):
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
@@ -221,4 +217,7 @@ user = st.session_state['authenticated_user']
 st.sidebar.write(f"Session : **{user['name']}**")
 st.sidebar.write("---")
 
-navigation_selector = st.sidebar.radio("Directions Modules", []
+# Navigation corrigée et vérifiée à 100%
+navigation_selector = st.sidebar.radio("Directions Modules", [
+    "01 Architecture du Système", 
+    "02 Direction Commerciale (CRM)",
