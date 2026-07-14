@@ -54,7 +54,6 @@ DB_NAME = "darvannerie_management.db"
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    # Table Utilisateurs
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +63,6 @@ def init_db():
             role TEXT NOT NULL
         )
     """)
-    # Table Prospects CRM
     c.execute("""
         CREATE TABLE IF NOT EXISTS crm_prospects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,7 +80,6 @@ def init_db():
             notes TEXT
         )
     """)
-    # Table Commandes & Projets de Production
     c.execute("""
         CREATE TABLE IF NOT EXISTS production_projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,28 +97,24 @@ def init_db():
             FOREIGN KEY (prospect_id) REFERENCES crm_prospects(id)
         )
     """)
-    
     c.execute("SELECT COUNT(*) FROM users")
     if c.fetchone() == 0:
         salt = bcrypt.gensalt(rounds=12)
         pwd_hash = bcrypt.hashpw("DarvannerieLux2026!".encode('utf-8'), salt).decode('utf-8')
         c.execute("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)",
                   ("ceo_admin", pwd_hash, "Director General", "Admin"))
-        
     c.execute("SELECT COUNT(*) FROM crm_prospects")
     if c.fetchone() == 0:
         c.execute("""
             INSERT INTO crm_prospects (id, company_name, segment, contact_person, phone, email, potential_value, probability, next_follow_up, notes)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (1, "Hôtel Royal Mansour - Extension", "Hospitality / Hôtels de Prestige", "Directeur Achats FF&E", "+212 524 38 88 88", "procurement@royalmansour.ma", 1650000.0, 0.75, "2026-07-20", "Projet sur-mesure bois de Noyer et rotin."))
-        
     c.execute("SELECT COUNT(*) FROM production_projects")
     if c.fetchone() == 0:
         c.execute("""
             INSERT INTO production_projects (prospect_id, project_title, current_stage, progress_percent, assigned_artisan, start_date, end_date, estimated_days, internal_comments, total_ht, amount_paid)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (1, "Lot 40 Lits de Jour d'Extérieur en Iroko Massif", "08. Atelier Ébénisterie / Bois", 45.0, "Youssef (Chef Ébéniste)", "2026-07-01", "2026-08-15", 45, "Séchage du bois validé. Débitage des structures de lits en cours.", 1375000.0, 495000.0))
-        
     conn.commit()
     conn.close()
 
@@ -217,7 +210,8 @@ user = st.session_state['authenticated_user']
 st.sidebar.write(f"Session : **{user['name']}**")
 st.sidebar.write("---")
 
-# Navigation corrigée et vérifiée à 100%
-navigation_selector = st.sidebar.radio("Directions Modules", [
-    "01 Architecture du Système", 
-    "02 Direction Commerciale (CRM)",
+# Navigation isolée et simplifiée sans structures complexes
+modules_list = ["01 Architecture du Système", "02 Direction Commerciale (CRM)", "03 Suivi de Production Ateliers", "04 Direction Financière & Comptable"]
+navigation_selector = st.sidebar.radio("Directions Modules", modules_list)
+
+st.markdown("""
