@@ -210,8 +210,6 @@ user = st.session_state['authenticated_user']
 st.sidebar.write(f"Session : **{user['name']}**")
 st.sidebar.write("---")
 
-# Navigation isolée et simplifiée sans structures complexes
 modules_list = ["01 Architecture du Système", "02 Direction Commerciale (CRM)", "03 Suivi de Production Ateliers", "04 Direction Financière & Comptable"]
 navigation_selector = st.sidebar.radio("Directions Modules", modules_list)
 
-st.markdown("""
