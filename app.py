@@ -95,6 +95,8 @@ def init_db():
             end_date TEXT,
             estimated_days INTEGER,
             internal_comments TEXT,
+            total_ht REAL DEFAULT 0.0,
+            amount_paid REAL DEFAULT 0.0,
             FOREIGN KEY (prospect_id) REFERENCES crm_prospects(id)
         )
     """)
@@ -117,14 +119,14 @@ def init_db():
     c.execute("SELECT COUNT(*) FROM production_projects")
     if c.fetchone() == 0:
         c.execute("""
-            INSERT INTO production_projects (prospect_id, project_title, current_stage, progress_percent, assigned_artisan, start_date, end_date, estimated_days, internal_comments)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (1, "Lot 40 Lits de Jour d'Extérieur en Iroko Massif", "08. Atelier Ébénisterie / Bois", 45.0, "Youssef (Chef Ébéniste)", "2026-07-01", "2026-08-15", 45, "Séchage du bois validé. Débitage des structures de lits en cours."))
+            INSERT INTO production_projects (prospect_id, project_title, current_stage, progress_percent, assigned_artisan, start_date, end_date, estimated_days, internal_comments, total_ht, amount_paid)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (1, "Lot 40 Lits de Jour d'Extérieur en Iroko Massif", "08. Atelier Ébénisterie / Bois", 45.0, "Youssef (Chef Ébéniste)", "2026-07-01", "2026-08-15", 45, "Séchage du bois validé. Débitage des structures de lits en cours.", 1375000.0, 495000.0))
         
     conn.commit()
     conn.close()
 
-# --- 4. SERVICES ET LOGIQUE CRM & PROD ---
+# --- 4. SERVICES ET LOGIQUE CRM, PROD & FINANCE ---
 class BusinessEngine:
     def __init__(self, db_path):
         self.db_path = db_path
@@ -163,7 +165,7 @@ class BusinessEngine:
             SELECT p.id as [ID Projet], c.company_name as [Client / Compte], p.project_title as [Intitulé Ouvrage sur-mesure], 
                    p.current_stage as [Étape Actuelle], p.progress_percent as [Avancement], p.assigned_artisan as [Responsable], 
                    p.start_date as [Début], p.end_date as [Échéance Livraison], p.estimated_days as [Durée Est. (Jours)], 
-                   p.internal_comments as [Notes Atelier]
+                   p.internal_comments as [Notes Atelier], p.total_ht as [Total HT (DH)], p.amount_paid as [Acompte Reçu (DH)]
             FROM production_projects p
             JOIN crm_prospects c ON p.prospect_id = c.id
         """
@@ -171,15 +173,15 @@ class BusinessEngine:
         conn.close()
         return df
 
-    def register_production_project(self, prospect_id, title, stage, progress, artisan, start, end, days, comments):
+    def register_production_project(self, prospect_id, title, stage, progress, artisan, start, end, days, comments, total_ht, amount_paid):
         if not title:
             raise ValueError("L'intitulé du projet de fabrication est obligatoire.")
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
         c.execute("""
-            INSERT INTO production_projects (prospect_id, project_title, current_stage, progress_percent, assigned_artisan, start_date, end_date, estimated_days, internal_comments)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (prospect_id, title, stage, progress, artisan, str(start), str(end), days, comments))
+            INSERT INTO production_projects (prospect_id, project_title, current_stage, progress_percent, assigned_artisan, start_date, end_date, estimated_days, internal_comments, total_ht, amount_paid)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (prospect_id, title, stage, progress, artisan, str(start), str(end), days, comments, total_ht, amount_paid))
         conn.commit()
         conn.close()
 
@@ -191,6 +193,18 @@ class BusinessEngine:
             SET current_stage = ?, progress_percent = ?, internal_comments = ?
             WHERE id = ?
         """, (next_stage, next_progress, comments, project_id))
+        conn.commit()
+        conn.close()
+
+    # Finance Mappings
+    def update_financial_ledger(self, project_id, total_ht, amount_paid):
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute("""
+            UPDATE production_projects 
+            SET total_ht = ?, amount_paid = ?
+            WHERE id = ?
+        """, (total_ht, amount_paid, project_id))
         conn.commit()
         conn.close()
 
@@ -208,22 +222,3 @@ st.sidebar.write(f"Session : **{user['name']}**")
 st.sidebar.write("---")
 
 navigation_selector = st.sidebar.radio("Directions Modules", [
-    "01 Architecture du Système", 
-    "02 Direction Commerciale (CRM)",
-    "03 Suivi de Production Ateliers"
-])
-
-# Style minimaliste luxe
-st.markdown("""
-    <style>
-        .metric-card {
-            background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #EAE6DF;
-            box-shadow: 0 4px 12px rgba(26, 26, 26, 0.02); margin-bottom: 1rem;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-# MODULE 01 : BASE COMPOSITIONS
-if navigation_selector == "01 Architecture du Système":
-    st.title("Moteur Central DARVANNERIE ERP")
-    st.success("Toutes les connexions aux pools relationnels SQL sont synchronisées.")
