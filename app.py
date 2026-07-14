@@ -29,12 +29,24 @@ class ClientSegment(enum.Enum):
     RESIDENTIAL = "Villas Privées & Résidences"
 
 class WorkflowStage(enum.Enum):
-    LEAD = "Lead Acquisition"
-    MEETING = "Réunion d'Alignement Technique"
-    QUOTATION = "Ingénierie du Chiffrage / Devis"
-    APPROVAL = "Signature Contractuelle / Validation"
-    TECHNICAL_STUDY = "Bureau d'Études / Plans CAD"
-    PROJECT_CLOSED = "Archivage Dossier Permanent"
+    LEAD = "01. Lead Acquisition"
+    MEETING = "02. Réunion Technique & Alignement"
+    QUOTATION = "03. Chiffrage & Devis"
+    APPROVAL = "04. Validation Contractuelle"
+    DEPOSIT = "05. Encaissement Acompte"
+    TECHNICAL_STUDY = "06. Bureau d'Études / Plans CAD"
+    MATERIAL_PURCHASE = "07. Achats Approvisionnements"
+    WOOD_WORKSHOP = "08. Atelier Ébénisterie / Bois"
+    METAL_WORKSHOP = "09. Atelier Métallurgie d'Art"
+    PAINTING = "10. Peinture, Vernis & Laquage"
+    RATTAN = "11. Tressage Rotin Main"
+    UPHOLSTERY = "12. Haute Tapisserie"
+    ASSEMBLY = "13. Assemblage Final"
+    QUALITY_CONTROL = "14. Contrôle Qualité Strict"
+    PACKAGING = "15. Mise en Caisse Logistique"
+    DELIVERY = "16. Transport & Livraison"
+    INSTALLATION = "17. Pose sur Site"
+    PROJECT_CLOSED = "18. Facturation Finale & Clôture"
 
 # --- 3. MOTEUR DE BASE DE DONNÉES (PERSISTENCE) ---
 DB_NAME = "darvannerie_management.db"
@@ -70,32 +82,57 @@ def init_db():
             notes TEXT
         )
     """)
+    # Table Commandes & Projets de Production
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS production_projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            prospect_id INTEGER NOT NULL,
+            project_title TEXT NOT NULL,
+            current_stage TEXT NOT NULL,
+            progress_percent REAL DEFAULT 0.0,
+            assigned_artisan TEXT,
+            start_date TEXT,
+            end_date TEXT,
+            estimated_days INTEGER,
+            internal_comments TEXT,
+            FOREIGN KEY (prospect_id) REFERENCES crm_prospects(id)
+        )
+    """)
     
     # Seeding initial si vide
     c.execute("SELECT COUNT(*) FROM users")
-    if c.fetchone()[0] == 0:
+    if c.fetchone() == 0:
         salt = bcrypt.gensalt(rounds=12)
         pwd_hash = bcrypt.hashpw("DarvannerieLux2026!".encode('utf-8'), salt).decode('utf-8')
         c.execute("INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)",
                   ("ceo_admin", pwd_hash, "Director General", "Admin"))
         
     c.execute("SELECT COUNT(*) FROM crm_prospects")
-    if c.fetchone()[0] == 0:
+    if c.fetchone() == 0:
         c.execute("""
-            INSERT INTO crm_prospects (company_name, segment, contact_person, phone, email, potential_value, probability, next_follow_up, notes)
+            INSERT INTO crm_prospects (id, company_name, segment, contact_person, phone, email, potential_value, probability, next_follow_up, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (1, "Hôtel Royal Mansour - Extension", "Hospitality / Hôtels de Prestige", "Directeur Achats FF&E", "+212 524 38 88 88", "procurement@royalmansour.ma", 1650000.0, 0.75, "2026-07-20", "Projet sur-mesure bois de Noyer et rotin."))
+        
+    c.execute("SELECT COUNT(*) FROM production_projects")
+    if c.fetchone() == 0:
+        c.execute("""
+            INSERT INTO production_projects (prospect_id, project_title, current_stage, progress_percent, assigned_artisan, start_date, end_date, estimated_days, internal_comments)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, ("Hôtel Royal Mansour - Extension", "Hospitality / Hôtels de Prestige", "Directeur Achats FF&E", "+212 524 38 88 88", "procurement@royalmansour.ma", 1650000.0, 0.75, "2026-07-20", "Projet sur-mesure bois de Noyer et rotin."))
+        """, (1, "Lot 40 Lits de Jour d'Extérieur en Iroko Massif", "08. Atelier Ébénisterie / Bois", 45.0, "Youssef (Chef Ébéniste)", "2026-07-01", "2026-08-15", 45, "Séchage du bois validé. Débitage des structures de lits en cours."))
+        
     conn.commit()
     conn.close()
 
-# --- 4. COUCHE SERVICES ET LOGIQUE CRM ---
-class CRMRepositoryAndService:
+# --- 4. SERVICES ET LOGIQUE CRM & PROD ---
+class BusinessEngine:
     def __init__(self, db_path):
         self.db_path = db_path
 
+    # CRM Mappings
     def get_all_prospects_df(self):
         conn = sqlite3.connect(self.db_path)
-        df = pd.read_sql_query("SELECT id as ID, company_name as [Établissement / Compte], segment as [Secteur d'Activité], contact_person as [Contact Principal], phone as [Téléphone], email as [E-mail], potential_value as [Valeur Potentielle (DH)], probability as [Probabilité], next_follow_up as [Prochain Suivi chantiers], notes as [Notes de Brief] FROM crm_prospects ORDER BY company_name", conn)
+        df = pd.read_sql_query("SELECT id as ID, company_name as [Établissement], segment as [Secteur d'Activité], contact_person as [Contact Principal], phone as [Téléphone], email as [E-mail], potential_value as [Valeur Potentielle (DH)], probability as [Probabilité], next_follow_up as [Prochain Suivi], notes as [Notes] FROM crm_prospects ORDER BY company_name", conn)
         conn.close()
         return df
 
@@ -119,22 +156,64 @@ class CRMRepositoryAndService:
         conn.commit()
         conn.close()
 
-# --- 5. INTERFACE UTILISATEUR VISUELLE (UI VIEWS) ---
+    # Production Mappings
+    def get_production_projects_df(self):
+        conn = sqlite3.connect(self.db_path)
+        query = """
+            SELECT p.id as [ID Projet], c.company_name as [Client / Compte], p.project_title as [Intitulé Ouvrage sur-mesure], 
+                   p.current_stage as [Étape Actuelle], p.progress_percent as [Avancement], p.assigned_artisan as [Responsable], 
+                   p.start_date as [Début], p.end_date as [Échéance Livraison], p.estimated_days as [Durée Est. (Jours)], 
+                   p.internal_comments as [Notes Atelier]
+            FROM production_projects p
+            JOIN crm_prospects c ON p.prospect_id = c.id
+        """
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        return df
+
+    def register_production_project(self, prospect_id, title, stage, progress, artisan, start, end, days, comments):
+        if not title:
+            raise ValueError("L'intitulé du projet de fabrication est obligatoire.")
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO production_projects (prospect_id, project_title, current_stage, progress_percent, assigned_artisan, start_date, end_date, estimated_days, internal_comments)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (prospect_id, title, stage, progress, artisan, str(start), str(end), days, comments))
+        conn.commit()
+        conn.close()
+
+    def update_production_stage(self, project_id, next_stage, next_progress, comments):
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute("""
+            UPDATE production_projects 
+            SET current_stage = ?, progress_percent = ?, internal_comments = ?
+            WHERE id = ?
+        """, (next_stage, next_progress, comments, project_id))
+        conn.commit()
+        conn.close()
+
+# --- 5. INTERFACE UTILISATEUR GLOBALE (UI) ---
 init_db()
-crm_system = CRMRepositoryAndService(DB_NAME)
+system_engine = BusinessEngine(DB_NAME)
 
 st.sidebar.title("⚜️ DARVANNERIE")
 st.sidebar.caption("Système Industriel Intégré v1.0")
 
 if 'authenticated_user' not in st.session_state:
-    st.session_state['authenticated_user'] = {"username": "ceo_admin", "role": "Admin", "name": "Directeur Général"}
+    st.session_state['authenticated_user'] = {"username": "ceo_admin", "role": "Admin", "name": "Director General"}
 user = st.session_state['authenticated_user']
 st.sidebar.write(f"Session : **{user['name']}**")
 st.sidebar.write("---")
 
-navigation_selector = st.sidebar.radio("Navigation Directions", ["01 Architecture du Système", "02 Direction Commerciale (CRM)"])
+navigation_selector = st.sidebar.radio("Directions Modules", [
+    "01 Architecture du Système", 
+    "02 Direction Commerciale (CRM)",
+    "03 Suivi de Production Ateliers"
+])
 
-# --- STYLE GRAPHIQUE ÉPURÉ DE LUXE ---
+# Style minimaliste luxe
 st.markdown("""
     <style>
         .metric-card {
@@ -144,63 +223,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# MODULE 01 : BASE COMPOSITIONS
 if navigation_selector == "01 Architecture du Système":
     st.title("Moteur Central DARVANNERIE ERP")
     st.success("Toutes les connexions aux pools relationnels SQL sont synchronisées.")
-    st.info("Passez à l'onglet '02 Direction Commerciale' dans le menu de gauche pour manipuler les clients.")
-
-elif navigation_selector == "02 Direction Commerciale (CRM)":
-    st.subheader("⚜️ Portefeuille Comptes & Grands Comptes B2B")
-    st.write("Gestion des relations stratégiques avec les architectes, les groupes hôteliers et les institutions.")
-    
-    tab_pipeline, tab_creation = st.tabs(["📊 Entonnoir des Affaires", "➕ Inscrire un Compte d'Architecture / Client"])
-    
-    with tab_pipeline:
-        df_crm = crm_system.get_all_prospects_df()
-        if not df_crm.empty:
-            df_crm["Valeur Pondérée (DH)"] = df_crm["Valeur Potentielle (DH)"] * df_crm["Probabilité"]
-            total_val = df_crm["Valeur Potentielle (DH)"].sum()
-            total_weighted = df_crm["Valeur Pondérée (DH)"].sum()
-            
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown(f"<div class='metric-card'><h5>Volume Brut en Négociation</h5><h2>{total_val:,.2f} DH</h2></div>", unsafe_allow_html=True)
-            with c2:
-                st.markdown(f"<div class='metric-card'><h5>Pipeline Pondéré de Confiance</h5><h2>{total_weighted:,.2f} DH</h2></div>", unsafe_allow_html=True)
-            
-            st.write("---")
-            # Formatage d'affichage pour la probabilité en pourcentage
-            df_display = df_crm.copy()
-            df_display["Probabilité de Succès"] = (df_display["Probabilité"] * 100).astype(int).astype(str) + "%"
-            st.dataframe(df_display.drop(columns=["Probabilité", "Valeur Pondérée (DH)"]), use_container_width=True, hide_index=True)
-            
-            st.write("---")
-            st.caption("Zone de Nettoyage de Sécurité")
-            id_to_delete = st.number_input("ID du compte à supprimer", min_value=1, step=1)
-            if st.button("Archiver / Supprimer définitivement le compte"):
-                crm_system.delete_prospect(int(id_to_delete))
-                st.success(f"Compte ID {id_to_delete} retiré.")
-                st.rerun()
-        else:
-            st.info("Aucun prospect enregistré pour le moment.")
-            
-    with tab_creation:
-        with st.form("crm_luxury_form"):
-            st.markdown("### Fiche d'Identification Institutionnelle")
-            col1, col2 = st.columns(2)
-            with col1:
-                company_name = st.text_input("Raison Sociale / Entité Corporate")
-                segment_selection = st.selectbox("Secteur Spécifique", [seg.value for seg in ClientSegment])
-                contact_person = st.text_input("Interlocuteur Principal (Ex: Directeur FF&E)")
-                phone = st.text_input("Ligne Directe de Contact")
-                email = st.text_input("Adresse E-mail Professionnelle")
-            with col2:
-                address = st.text_area("Adresse Physique / Bureau de Prescription")
-                website = st.text_input("Site Web / Portfolio en ligne du Designer")
-                source = st.selectbox("Source de l'Opportunité", ["Recommandation / Réseau", "Appel d'Offre Institutionnel", "Prospection Directe", "Inbound Digital"])
-                potential_value = st.number_input("Estimation Budget Ameublement Global (DH)", min_value=0.0, step=10000.0, format="%.2f")
-                probability_percent = st.slider("Indice de Probabilité de Signature (%)", min_value=10, max_value=100, value=30, step=5)
-                next_follow_up = st.date_input("Date planifiée du prochain Brief Technique", value=date.today())
-            
-            notes = st.text_area("Spécificités du projet / Matières demandées (Ex: Bois de Noyer, finitions Laiton)")
-            if st.form_submit_button("Valider et Ouvrir le Dossier Client"):
