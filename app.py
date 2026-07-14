@@ -221,4 +221,4 @@ user = st.session_state['authenticated_user']
 st.sidebar.write(f"Session : **{user['name']}**")
 st.sidebar.write("---")
 
-navigation_selector = st.sidebar.radio("Directions Modules", [
+navigation_selector = st.sidebar.radio("Directions Modules", []
